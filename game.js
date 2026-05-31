@@ -26,6 +26,7 @@
   let best = Math.floor(Number(localStorage.swimmyBest || 0));
   let rafStarted = false;
   let last = 0;
+  const input = { holding: false };
 
   configureCanvas();
   window.addEventListener('resize', () => configureCanvas('title'));
@@ -137,22 +138,40 @@
     o.stop(ac.currentTime + dur);
   }
 
-  function flap() {
+  function startSwim() {
     if (!state) return;
     if (state.mode !== 'play') reset('play');
-    state.fish.vy = -430;
-    state.fish.rot = -0.42;
-    beep(630, 0.055, 'triangle');
+    if (!input.holding) beep(520, 0.045, 'triangle');
+    input.holding = true;
+    state.fish.rot = -0.35;
+  }
+
+  function stopSwim() {
+    input.holding = false;
   }
 
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space' || e.code === 'ArrowUp') {
       e.preventDefault();
-      flap();
+      startSwim();
     }
     if (e.code === 'KeyR') reset('title');
   });
-  canvas.addEventListener('pointerdown', flap);
+  document.addEventListener('keyup', (e) => {
+    if (e.code === 'Space' || e.code === 'ArrowUp') {
+      e.preventDefault();
+      stopSwim();
+    }
+  });
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    canvas.setPointerCapture?.(e.pointerId);
+    startSwim();
+  });
+  canvas.addEventListener('pointerup', stopSwim);
+  canvas.addEventListener('pointercancel', stopSwim);
+  canvas.addEventListener('pointerleave', stopSwim);
+  window.addEventListener('blur', stopSwim);
   muteBtn.onclick = () => {
     muted = !muted;
     muteBtn.textContent = 'Sound: ' + (muted ? 'Off' : 'On');
@@ -176,7 +195,11 @@
       gap,
       passed: false,
       top: pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))],
-      bottom: pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))]
+      bottom: pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))],
+      topPhase: rand(0, Math.PI * 2),
+      bottomPhase: rand(0, Math.PI * 2),
+      moveAmp: H > W ? 46 : 36,
+      moveRate: rand(1.25, 2.15)
     });
   }
 
@@ -198,11 +221,13 @@
     state.score = state.passed;
     state.speed = Math.min(350, 245 + state.t * 2.2);
     state.gap = Math.max(minGap(), baseGap() - state.t * 0.28);
-
     const f = state.fish;
-    f.vy += 1240 * dt;
+    const swimAccel = input.holding ? -1650 : 1120;
+    f.vy += swimAccel * dt;
+    f.vy = Math.max(-430, Math.min(620, f.vy));
     f.y += f.vy * dt;
-    f.rot = Math.min(0.95, f.rot + 2.45 * dt);
+    const targetRot = Math.max(-0.48, Math.min(0.86, f.vy / 680));
+    f.rot += (targetRot - f.rot) * Math.min(1, dt * 10);
 
     state.spawn -= dt;
     if (state.spawn <= 0) {
@@ -232,18 +257,14 @@
     const f = state.fish;
     const rx = 31;
     const ry = 34;
-    const gapTop = o.gapY - o.gap / 2;
-    const gapBot = o.gapY + o.gap / 2;
-    const topY = o.kind === 'coral' ? gapTop - 720 : gapTop - o.size;
-    const bottomY = gapBot;
-    const drawH = o.kind === 'coral' ? 720 : o.size;
+    const bounds = obstacleBounds(o);
     const left = f.x - rx;
     const right = f.x + rx;
     const top = f.y - ry;
     const bottom = f.y + ry;
 
     if (right < o.x || left > o.x + o.w) return false;
-    if (bottom < topY || top > bottomY + drawH) return false;
+    if (bottom < bounds.top.y || top > bounds.bottom.y + bounds.bottom.h) return false;
 
     for (let y = top; y <= bottom; y += 8) {
       for (let x = left; x <= right; x += 8) {
@@ -251,11 +272,11 @@
         const ny = (y - f.y) / ry;
         if (nx * nx + ny * ny > 1) continue;
         if (o.kind === 'coral') {
-          if (alphaHit(masks.coralTop, x, y, o.x, topY, o.w, drawH)) return true;
-          if (alphaHit(masks.coralBottom, x, y, o.x, bottomY, o.w, drawH)) return true;
+          if (alphaHit(masks.coralTop, x, y, bounds.top.x, bounds.top.y, bounds.top.w, bounds.top.h)) return true;
+          if (alphaHit(masks.coralBottom, x, y, bounds.bottom.x, bounds.bottom.y, bounds.bottom.w, bounds.bottom.h)) return true;
         } else {
-          if (alphaHit(masks[o.top], x, y, o.x, topY, o.w, drawH)) return true;
-          if (alphaHit(masks[o.bottom], x, y, o.x, bottomY, o.w, drawH)) return true;
+          if (alphaHit(masks[o.top], x, y, bounds.top.x, bounds.top.y, bounds.top.w, bounds.top.h)) return true;
+          if (alphaHit(masks[o.bottom], x, y, bounds.bottom.x, bounds.bottom.y, bounds.bottom.w, bounds.bottom.h)) return true;
         }
       }
     }
@@ -269,9 +290,26 @@
     return mask.alpha[(localY * mask.w + localX) * 4 + 3] > 48;
   }
 
+  function obstacleBounds(o) {
+    const gapTop = o.gapY - o.gap / 2;
+    const gapBot = o.gapY + o.gap / 2;
+    if (o.kind === 'coral') {
+      return {
+        top: { x: o.x, y: gapTop - 720, w: o.w, h: 720 },
+        bottom: { x: o.x, y: gapBot, w: o.w, h: 720 }
+      };
+    }
+    const topDrift = Math.sin(state.t * o.moveRate + o.topPhase) * o.moveAmp;
+    const bottomDrift = Math.sin(state.t * o.moveRate + o.bottomPhase) * o.moveAmp;
+    return {
+      top: { x: o.x, y: gapTop - o.size + topDrift, w: o.w, h: o.size },
+      bottom: { x: o.x, y: gapBot + bottomDrift, w: o.w, h: o.size }
+    };
+  }
   function gameOver() {
     if (state.mode !== 'play') return;
     state.mode = 'over';
+    input.holding = false;
     state.hitFlash = 1;
     best = Math.max(best, state.score);
     localStorage.swimmyBest = String(best);
@@ -302,14 +340,26 @@
 
   function drawObstacles() {
     for (const o of state.obstacles) {
-      const gapTop = o.gapY - o.gap / 2;
-      const gapBot = o.gapY + o.gap / 2;
+      const bounds = obstacleBounds(o);
       if (o.kind === 'coral') {
-        ctx.drawImage(img.coralTop, o.x, gapTop - 720, o.w, 720);
-        ctx.drawImage(img.coralBottom, o.x, gapBot, o.w, 720);
+        ctx.drawImage(img.coralTop, bounds.top.x, bounds.top.y, bounds.top.w, bounds.top.h);
+        ctx.drawImage(img.coralBottom, bounds.bottom.x, bounds.bottom.y, bounds.bottom.w, bounds.bottom.h);
       } else {
-        ctx.drawImage(img[o.top], o.x, gapTop - o.size, o.w, o.size);
-        ctx.drawImage(img[o.bottom], o.x, gapBot, o.w, o.size);
+        ctx.save();
+        const pulse = Math.sin(state.t * o.moveRate + o.topPhase) * 0.08;
+        ctx.globalAlpha = 0.96;
+        ctx.translate(bounds.top.x + bounds.top.w / 2, bounds.top.y + bounds.top.h / 2);
+        ctx.rotate(pulse);
+        ctx.drawImage(img[o.top], -bounds.top.w / 2, -bounds.top.h / 2, bounds.top.w, bounds.top.h);
+        ctx.restore();
+
+        ctx.save();
+        const counterPulse = Math.sin(state.t * o.moveRate + o.bottomPhase) * -0.08;
+        ctx.globalAlpha = 0.96;
+        ctx.translate(bounds.bottom.x + bounds.bottom.w / 2, bounds.bottom.y + bounds.bottom.h / 2);
+        ctx.rotate(counterPulse);
+        ctx.drawImage(img[o.bottom], -bounds.bottom.w / 2, -bounds.bottom.h / 2, bounds.bottom.w, bounds.bottom.h);
+        ctx.restore();
       }
     }
   }
@@ -354,7 +404,7 @@
     ctx.fillText(sub, W / 2, H * 0.47);
     ctx.font = '700 18px system-ui, Segoe UI, sans-serif';
     ctx.fillStyle = '#92e8f3';
-    ctx.fillText('SPACE / CLICK / TAP to flap - R to restart', W / 2, H * 0.55);
+    ctx.fillText('HOLD SPACE / PRESS / TOUCH to swim - R to restart', W / 2, H * 0.55);
     ctx.textAlign = 'left';
   }
 
@@ -367,7 +417,7 @@
     drawObstacles();
     drawFish();
     panel();
-    if (state.mode === 'title') overlay('Magikarp Flap', 'Dodge coral and Pokemon hazards.');
+    if (state.mode === 'title') overlay('Magikarp Flap', 'Hold to swim up. Release to sink.');
     if (state.mode === 'over') overlay('Splash Down!', 'Final score: ' + state.score);
     if (state.hitFlash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${state.hitFlash * 0.4})`;
