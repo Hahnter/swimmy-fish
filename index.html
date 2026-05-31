@@ -3,18 +3,25 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Swimmy Fish</title>
+  <meta name="theme-color" content="#021522" />
+  <title>Magikarp Flap</title>
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="shell">
     <header>
-      <div><h1>Swimmy Fish</h1><p>SPACE / CLICK / TAP to swim up. Don’t bonk the coral.</p></div>
+      <div><h1>Magikarp Flap</h1><p>SPACE / CLICK / TAP to flap up. Dodge the Pokemon hazards.</p></div>
       <button id="muteBtn" aria-label="Toggle sound">Sound: On</button>
     </header>
-    <canvas id="game" width="960" height="540" aria-label="Swimmy Fish game canvas"></canvas>
-    <footer>Best time is saved locally. Host this folder anywhere static, including Cloudflare Pages.</footer>
+    <canvas id="game" width="960" height="540" aria-label="Magikarp Flap game canvas"></canvas>
+    <footer>Best score is saved locally. Host this folder anywhere static, including Cloudflare Pages.</footer>
   </div>
   <script src="game.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
+    }
+  </script>
 </body>
 </html>

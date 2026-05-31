@@ -3,31 +3,40 @@
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha: false });
   const muteBtn = document.getElementById('muteBtn');
-  const W = canvas.width, H = canvas.height;
+  let W = canvas.width, H = canvas.height;
 
   const img = {};
+  const masks = {};
   const files = {
     bg: 'assets/underwater_background_tile.png',
-    fish: 'assets/swimmy_fish_game.png',
+    fish: 'assets/magikarp_pokeapi_129.png',
     coralTop: 'assets/coral_obstacle_top.png',
     coralBottom: 'assets/coral_obstacle_bottom.png',
-    mine: 'assets/urchin_mine.png',
-    bubble: 'assets/bubble.png'
+    bubble: 'assets/bubble.png',
+    tentacool: 'assets/tentacool_pokeapi_72.png',
+    starmie: 'assets/starmie_pokeapi_121.png',
+    qwilfish: 'assets/qwilfish_pokeapi_211.png'
   };
 
+  const pokemonObstacles = ['tentacool', 'starmie', 'qwilfish'];
   const rand = (a, b) => a + Math.random() * (b - a);
   let loaded = 0;
   let state;
   let muted = false;
-  let best = Number(localStorage.swimmyBest || 0);
+  let best = Math.floor(Number(localStorage.swimmyBest || 0));
   let rafStarted = false;
   let last = 0;
+
+  configureCanvas();
+  window.addEventListener('resize', () => configureCanvas('title'));
+  window.addEventListener('orientationchange', () => setTimeout(() => configureCanvas('title'), 120));
 
   Object.entries(files).forEach(([k, src]) => {
     img[k] = new Image();
     img[k].onload = () => {
       loaded++;
       if (loaded === Object.keys(files).length) {
+        createMasks();
         reset('title');
         startLoopOnce();
       }
@@ -40,14 +49,14 @@
       mode,
       t: 0,
       bgx: 0,
-      fish: { x: 195, y: H * 0.45, vy: 0, rot: 0 },
+      fish: { x: Math.max(138, W * 0.22), y: H * 0.45, vy: 0, rot: 0 },
       obstacles: [],
       bubbles: [],
       spawn: 0.45,
       score: 0,
       passed: 0,
-      speed: 210,
-      gap: 188,
+      speed: 245,
+      gap: baseGap(),
       hitFlash: 0
     };
     for (let i = 0; i < 32; i++) {
@@ -59,6 +68,56 @@
     if (rafStarted) return;
     rafStarted = true;
     requestAnimationFrame(loop);
+  }
+
+  function configureCanvas(resetMode) {
+    const portrait = window.innerHeight > window.innerWidth && window.innerWidth <= 820;
+    const nextW = portrait ? 540 : 960;
+    const nextH = portrait ? 960 : 540;
+    document.documentElement.dataset.layout = portrait ? 'portrait' : 'landscape';
+    if (canvas.width === nextW && canvas.height === nextH) return;
+    canvas.width = nextW;
+    canvas.height = nextH;
+    W = nextW;
+    H = nextH;
+    if (state) reset(resetMode || (state.mode === 'play' ? 'title' : state.mode));
+  }
+
+  function baseGap() {
+    return H > W ? 220 : 170;
+  }
+
+  function minGap() {
+    return H > W ? 178 : 142;
+  }
+
+  function pokemonSize() {
+    return H > W ? 112 : 104;
+  }
+
+  function coralWidth() {
+    return H > W ? 126 : 146;
+  }
+
+  function createMasks() {
+    masks.coralTop = createAlphaMask(img.coralTop);
+    masks.coralBottom = createAlphaMask(img.coralBottom);
+    masks.tentacool = createAlphaMask(img.tentacool);
+    masks.starmie = createAlphaMask(img.starmie);
+    masks.qwilfish = createAlphaMask(img.qwilfish);
+  }
+
+  function createAlphaMask(image) {
+    const c = document.createElement('canvas');
+    c.width = image.naturalWidth;
+    c.height = image.naturalHeight;
+    const maskCtx = c.getContext('2d');
+    maskCtx.drawImage(image, 0, 0);
+    return {
+      w: c.width,
+      h: c.height,
+      alpha: maskCtx.getImageData(0, 0, c.width, c.height).data
+    };
   }
 
   function beep(freq = 480, dur = 0.05, type = 'sine') {
@@ -78,33 +137,47 @@
     o.stop(ac.currentTime + dur);
   }
 
-  function swim() {
+  function flap() {
     if (!state) return;
     if (state.mode !== 'play') reset('play');
-    state.fish.vy = -330;
-    state.fish.rot = -0.27;
+    state.fish.vy = -430;
+    state.fish.rot = -0.42;
     beep(630, 0.055, 'triangle');
   }
 
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space' || e.code === 'ArrowUp') {
       e.preventDefault();
-      swim();
+      flap();
     }
     if (e.code === 'KeyR') reset('title');
   });
-  canvas.addEventListener('pointerdown', swim);
+  canvas.addEventListener('pointerdown', flap);
   muteBtn.onclick = () => {
     muted = !muted;
     muteBtn.textContent = 'Sound: ' + (muted ? 'Off' : 'On');
   };
 
   function spawnObstacle() {
-    const margin = 78;
+    const margin = H > W ? 126 : 96;
     const gap = state.gap;
     const cy = rand(margin + gap / 2, H - margin - gap / 2);
-    const kind = Math.random() < 0.84 ? 'coral' : 'mine';
-    state.obstacles.push({ x: W + 110, w: 146, gapY: cy, gap, passed: false, kind, phase: rand(0, 10) });
+    if (Math.random() < 0.42) {
+      state.obstacles.push({ kind: 'coral', x: W + 110, w: coralWidth(), gapY: cy, gap, passed: false });
+      return;
+    }
+    const size = pokemonSize();
+    state.obstacles.push({
+      kind: 'pokemon',
+      x: W + 110,
+      w: size,
+      size,
+      gapY: cy,
+      gap,
+      passed: false,
+      top: pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))],
+      bottom: pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))]
+    });
   }
 
   function update(dt) {
@@ -122,14 +195,14 @@
     if (state.mode !== 'play') return;
 
     state.t += dt;
-    state.score = state.t;
-    state.speed = Math.min(372, 210 + state.t * 3.1);
-    state.gap = Math.max(134, 188 - state.t * 0.43);
+    state.score = state.passed;
+    state.speed = Math.min(350, 245 + state.t * 2.2);
+    state.gap = Math.max(minGap(), baseGap() - state.t * 0.28);
 
     const f = state.fish;
-    f.vy += 820 * dt;
+    f.vy += 1240 * dt;
     f.y += f.vy * dt;
-    f.rot = Math.min(0.65, f.rot + 1.8 * dt);
+    f.rot = Math.min(0.95, f.rot + 2.45 * dt);
 
     state.spawn -= dt;
     if (state.spawn <= 0) {
@@ -142,6 +215,7 @@
       if (!o.passed && o.x + o.w < f.x - 35) {
         o.passed = true;
         state.passed++;
+        state.score = state.passed;
         beep(900, 0.035, 'square');
       }
       if (collide(o)) gameOver();
@@ -151,21 +225,48 @@
     state.obstacles = state.obstacles.filter(o => o.x > -230);
     if (state.obstacles.length > 8) state.obstacles.splice(0, state.obstacles.length - 8);
 
-    if (f.y < 22 || f.y > H - 48) gameOver();
+    if (f.y < 18 || f.y > H - 40) gameOver();
   }
 
   function collide(o) {
     const f = state.fish;
-    const fx = f.x - 41, fy = f.y - 30, fw = 82, fh = 60;
-    if (o.kind === 'mine') {
-      const mx = o.x + o.w / 2;
-      const my = o.gapY + Math.sin(state.t * 2 + o.phase) * 78;
-      return Math.hypot(f.x - mx, f.y - my) < 68;
-    }
+    const rx = 31;
+    const ry = 34;
     const gapTop = o.gapY - o.gap / 2;
     const gapBot = o.gapY + o.gap / 2;
-    const inX = fx + fw > o.x && fx < o.x + o.w;
-    return inX && (fy < gapTop || fy + fh > gapBot);
+    const topY = o.kind === 'coral' ? gapTop - 720 : gapTop - o.size;
+    const bottomY = gapBot;
+    const drawH = o.kind === 'coral' ? 720 : o.size;
+    const left = f.x - rx;
+    const right = f.x + rx;
+    const top = f.y - ry;
+    const bottom = f.y + ry;
+
+    if (right < o.x || left > o.x + o.w) return false;
+    if (bottom < topY || top > bottomY + drawH) return false;
+
+    for (let y = top; y <= bottom; y += 8) {
+      for (let x = left; x <= right; x += 8) {
+        const nx = (x - f.x) / rx;
+        const ny = (y - f.y) / ry;
+        if (nx * nx + ny * ny > 1) continue;
+        if (o.kind === 'coral') {
+          if (alphaHit(masks.coralTop, x, y, o.x, topY, o.w, drawH)) return true;
+          if (alphaHit(masks.coralBottom, x, y, o.x, bottomY, o.w, drawH)) return true;
+        } else {
+          if (alphaHit(masks[o.top], x, y, o.x, topY, o.w, drawH)) return true;
+          if (alphaHit(masks[o.bottom], x, y, o.x, bottomY, o.w, drawH)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function alphaHit(mask, worldX, worldY, drawX, drawY, drawW, drawH) {
+    const localX = Math.floor((worldX - drawX) / drawW * mask.w);
+    const localY = Math.floor((worldY - drawY) / drawH * mask.h);
+    if (localX < 0 || localX >= mask.w || localY < 0 || localY >= mask.h) return false;
+    return mask.alpha[(localY * mask.w + localX) * 4 + 3] > 48;
   }
 
   function gameOver() {
@@ -173,7 +274,7 @@
     state.mode = 'over';
     state.hitFlash = 1;
     best = Math.max(best, state.score);
-    localStorage.swimmyBest = best.toFixed(2);
+    localStorage.swimmyBest = String(best);
     beep(130, 0.18, 'sawtooth');
   }
 
@@ -201,15 +302,15 @@
 
   function drawObstacles() {
     for (const o of state.obstacles) {
-      if (o.kind === 'mine') {
-        const y = o.gapY + Math.sin(state.t * 2 + o.phase) * 78;
-        ctx.drawImage(img.mine, o.x - 8, y - 80, 160, 160);
-        continue;
-      }
       const gapTop = o.gapY - o.gap / 2;
       const gapBot = o.gapY + o.gap / 2;
-      ctx.drawImage(img.coralTop, o.x, gapTop - 720, o.w, 720);
-      ctx.drawImage(img.coralBottom, o.x, gapBot, o.w, 720);
+      if (o.kind === 'coral') {
+        ctx.drawImage(img.coralTop, o.x, gapTop - 720, o.w, 720);
+        ctx.drawImage(img.coralBottom, o.x, gapBot, o.w, 720);
+      } else {
+        ctx.drawImage(img[o.top], o.x, gapTop - o.size, o.w, o.size);
+        ctx.drawImage(img[o.bottom], o.x, gapBot, o.w, o.size);
+      }
     }
   }
 
@@ -218,8 +319,9 @@
     ctx.save();
     ctx.translate(f.x, f.y);
     ctx.rotate(f.rot);
+    ctx.scale(-1, 1);
     const bob = state.mode === 'title' ? Math.sin(performance.now() / 260) * 6 : 0;
-    ctx.drawImage(img.fish, -64, -48 + bob, 128, 96);
+    ctx.drawImage(img.fish, -48, -48 + bob, 96, 96);
     ctx.restore();
   }
 
@@ -230,10 +332,10 @@
     ctx.roundRect(16, 14, 292, 84, 16);
     ctx.fill();
     ctx.fillStyle = '#dffcff';
-    ctx.fillText('Time: ' + state.score.toFixed(1) + 's', 32, 48);
-    ctx.fillText('Coral cleared: ' + state.passed, 32, 82);
+    ctx.fillText('Score: ' + state.score, 32, 48);
+    ctx.fillText('Best: ' + best, 32, 82);
     ctx.textAlign = 'right';
-    ctx.fillText('Best: ' + best.toFixed(1) + 's', W - 26, 48);
+    ctx.fillText('Magikarp Flap', W - 26, 48);
     ctx.textAlign = 'left';
   }
 
@@ -252,7 +354,7 @@
     ctx.fillText(sub, W / 2, H * 0.47);
     ctx.font = '700 18px system-ui, Segoe UI, sans-serif';
     ctx.fillStyle = '#92e8f3';
-    ctx.fillText('SPACE / CLICK / TAP to swim • R to restart', W / 2, H * 0.55);
+    ctx.fillText('SPACE / CLICK / TAP to flap - R to restart', W / 2, H * 0.55);
     ctx.textAlign = 'left';
   }
 
@@ -265,8 +367,8 @@
     drawObstacles();
     drawFish();
     panel();
-    if (state.mode === 'title') overlay('Swimmy Fish', 'Stay alive as long as possible.');
-    if (state.mode === 'over') overlay('Fish Food!', 'You lasted ' + state.score.toFixed(1) + ' seconds.');
+    if (state.mode === 'title') overlay('Magikarp Flap', 'Dodge coral and Pokemon hazards.');
+    if (state.mode === 'over') overlay('Splash Down!', 'Final score: ' + state.score);
     if (state.hitFlash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${state.hitFlash * 0.4})`;
       ctx.fillRect(0, 0, W, H);
