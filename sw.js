@@ -1,7 +1,6 @@
-const CACHE_NAME = 'magikarp-flap-v4';
+const CACHE_NAME = 'magikarp-flap-v5';
 const APP_SHELL = './index.html';
 const ASSETS = [
-  APP_SHELL,
   './style.css',
   './game.js',
   './manifest.webmanifest',
@@ -17,10 +16,52 @@ const ASSETS = [
   './assets/icon-512.png'
 ];
 
+async function appShellResponse() {
+  const cache = await caches.open(CACHE_NAME);
+  let cached = await cache.match(APP_SHELL);
+
+  try {
+    const response = await fetch(APP_SHELL, { cache: 'reload', redirect: 'follow' });
+    if (response && response.ok) {
+      const body = await response.clone().text();
+      cached = new Response(body, {
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-cache'
+        }
+      });
+      await cache.put(APP_SHELL, cached.clone());
+    }
+  } catch (error) {
+    // Fall back to the cached shell below.
+  }
+
+  if (cached) {
+    const body = await cached.clone().text();
+    return new Response(body, {
+      status: 200,
+      statusText: 'OK',
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache'
+      }
+    });
+  }
+
+  return new Response('Magikarp Flap is not available offline yet.', {
+    status: 503,
+    statusText: 'Service Unavailable',
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+  });
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(ASSETS))
+      .then(() => appShellResponse())
       .then(() => self.skipWaiting())
   );
 });
@@ -36,14 +77,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (event.request.mode === 'navigate') {
-    event.respondWith(
-      caches.match(APP_SHELL).then((cached) => {
-        const network = fetch(APP_SHELL, { cache: 'reload' })
-          .then((response) => response && response.ok && !response.redirected ? response : cached)
-          .catch(() => cached);
-        return cached || network;
-      })
-    );
+    event.respondWith(appShellResponse());
     return;
   }
 
