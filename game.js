@@ -56,10 +56,14 @@
       obstacles: [],
       bubbles: [],
       swimBubbles: [],
+      collectibles: [],
       popups: [],
       spawn: 0.45,
+      collectibleSpawn: 1.1,
       score: 0,
       passed: 0,
+      splash: 0,
+      invuln: 0,
       speed: 245,
       gap: baseGap(),
       hitFlash: 0
@@ -102,6 +106,10 @@
 
   function coralWidth() {
     return H > W ? 126 : 146;
+  }
+
+  function splashNeeded() {
+    return 5;
   }
 
   function createMasks() {
@@ -249,9 +257,18 @@
     }
     state.popups = state.popups.filter(p => p.life > 0);
 
+    for (const c of state.collectibles) {
+      c.x -= state.speed * dt;
+      c.phase += dt * 5;
+      c.y += Math.sin(c.phase) * 18 * dt;
+      c.rot += dt * 2.4;
+    }
+    state.collectibles = state.collectibles.filter(c => c.x > -80 && !c.collected);
+
     if (state.mode !== 'play') return;
 
     state.t += dt;
+    state.invuln = Math.max(0, state.invuln - dt);
     state.score = state.passed;
     state.speed = Math.min(350, 245 + state.t * 2.2);
     state.gap = Math.max(minGap(), baseGap() - state.t * 0.28);
@@ -284,6 +301,14 @@
       state.spawn = Math.max(0.92, 1.55 - state.t * 0.012);
     }
 
+    state.collectibleSpawn -= dt;
+    if (state.collectibleSpawn <= 0) {
+      spawnCollectible();
+      state.collectibleSpawn = rand(2.1, 3.4);
+    }
+
+    collectItems();
+
     for (const o of state.obstacles) {
       o.x -= state.speed * dt;
       if (!o.passed && o.x + o.w < f.x - 35) {
@@ -293,7 +318,14 @@
         addPopup(state.passed % 5 === 0 ? 'Nice swim!' : 'Dodged!', f.x + 36, f.y - 28, '#b9fffb');
         beep(900, 0.035, 'square');
       }
-      if (collide(o)) gameOver();
+      if (collide(o)) {
+        if (state.invuln > 0) continue;
+        if (state.splash >= splashNeeded()) {
+          triggerSplash();
+        } else {
+          gameOver();
+        }
+      }
     }
 
     // Critical performance fix: keep the active obstacle list small forever.
@@ -333,6 +365,34 @@
       }
     }
     return false;
+  }
+
+  function collectItems() {
+    const f = state.fish;
+    for (const c of state.collectibles) {
+      const d = Math.hypot(f.x - c.x, f.y - c.y);
+      if (d > 42) continue;
+      c.collected = true;
+      state.splash = Math.min(splashNeeded(), state.splash + 1);
+      addPopup(state.splash >= splashNeeded() ? 'Splash ready!' : '+Splash', c.x, c.y - 18, '#ffef83');
+      beep(state.splash >= splashNeeded() ? 1040 : 760, 0.045, 'square');
+    }
+  }
+
+  function spawnCollectible() {
+    if (state.obstacles.length < 1) return;
+    const lastObstacle = state.obstacles[state.obstacles.length - 1];
+    const x = lastObstacle.x + rand(180, 300);
+    const y = lastObstacle.gapY + rand(-state.gap * 0.24, state.gap * 0.24);
+    state.collectibles.push({ x, y, phase: rand(0, Math.PI * 2), rot: rand(0, Math.PI * 2), collected: false });
+  }
+
+  function triggerSplash() {
+    state.splash = 0;
+    state.invuln = 1.25;
+    state.hitFlash = 0.5;
+    addPopup('Splash!', state.fish.x + 45, state.fish.y - 38, '#ffffff');
+    beep(1180, 0.11, 'triangle');
   }
 
   function alphaHit(mask, worldX, worldY, drawX, drawY, drawW, drawH) {
@@ -412,6 +472,34 @@
     beep(130, 0.18, 'sawtooth');
   }
 
+  function drawCollectibles() {
+    for (const c of state.collectibles) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(c.rot);
+      ctx.fillStyle = '#f54242';
+      ctx.strokeStyle = '#10253b';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 16, Math.PI, 0);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, 16, 0, Math.PI);
+      ctx.fillStyle = '#f8fbff';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-16, 0);
+      ctx.lineTo(16, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#f8fbff';
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   function drawBg() {
     const bgWidth = img.bg.naturalWidth || 1024;
     const x = -state.bgx;
@@ -475,6 +563,16 @@
     ctx.scale(1 + (stretch - 1) * 0.8, 1 - (stretch - 1) * 0.55);
     ctx.drawImage(img.fish, -48, -48 + bob, 96, 96);
     ctx.restore();
+    if (state.invuln > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.35 + Math.sin(state.t * 24) * 0.18;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, 52 + Math.sin(state.t * 12) * 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   function panel() {
@@ -486,6 +584,19 @@
     ctx.fillStyle = '#dffcff';
     ctx.fillText('Score: ' + state.score, 32, 48);
     ctx.fillText('Best: ' + best, 32, 82);
+    const meterX = H > W ? 32 : 318;
+    const meterY = H > W ? 106 : 30;
+    const meterW = H > W ? 190 : 160;
+    ctx.fillStyle = 'rgba(185,255,251,.25)';
+    ctx.fillRect(meterX, meterY, meterW, 18);
+    ctx.fillStyle = state.splash >= splashNeeded() ? '#ffef83' : '#7eeaff';
+    ctx.fillRect(meterX, meterY, meterW * (state.splash / splashNeeded()), 18);
+    ctx.strokeStyle = '#dffcff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(meterX, meterY, meterW, 18);
+    ctx.fillStyle = '#dffcff';
+    ctx.font = '800 14px system-ui, Segoe UI, sans-serif';
+    ctx.fillText('Splash', meterX, meterY + 38);
     ctx.textAlign = 'right';
     ctx.fillText('Magikarp Flap', W - 26, 48);
     ctx.textAlign = 'left';
@@ -533,6 +644,7 @@
     ctx.clearRect(0, 0, W, H);
     drawBg();
     drawObstacles();
+    drawCollectibles();
     drawFish();
     panel();
     drawPopups();
