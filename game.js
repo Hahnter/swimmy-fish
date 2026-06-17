@@ -59,7 +59,7 @@
       collectibles: [],
       popups: [],
       spawn: 0.45,
-      collectibleSpawn: 1.1,
+      collectibleSpawn: 0.65,
       score: 0,
       passed: 0,
       splash: 0,
@@ -304,7 +304,7 @@
     state.collectibleSpawn -= dt;
     if (state.collectibleSpawn <= 0) {
       spawnCollectible();
-      state.collectibleSpawn = rand(2.1, 3.4);
+      state.collectibleSpawn = rand(1.45, 2.35);
     }
 
     collectItems();
@@ -371,7 +371,7 @@
     const f = state.fish;
     for (const c of state.collectibles) {
       const d = Math.hypot(f.x - c.x, f.y - c.y);
-      if (d > 42) continue;
+      if (d > 48) continue;
       c.collected = true;
       state.splash = Math.min(splashNeeded(), state.splash + 1);
       addPopup(state.splash >= splashNeeded() ? 'Splash ready!' : '+Splash', c.x, c.y - 18, '#ffef83');
@@ -380,10 +380,10 @@
   }
 
   function spawnCollectible() {
-    if (state.obstacles.length < 1) return;
-    const lastObstacle = state.obstacles[state.obstacles.length - 1];
-    const x = lastObstacle.x + rand(180, 300);
-    const y = lastObstacle.gapY + rand(-state.gap * 0.24, state.gap * 0.24);
+    const nextObstacle = state.obstacles.find(o => o.x > W * 0.42) || state.obstacles[state.obstacles.length - 1];
+    const laneY = nextObstacle ? nextObstacle.gapY : H * 0.5;
+    const x = W + rand(40, 120);
+    const y = Math.max(82, Math.min(H - 82, laneY + rand(-state.gap * 0.22, state.gap * 0.22)));
     state.collectibles.push({ x, y, phase: rand(0, Math.PI * 2), rot: rand(0, Math.PI * 2), collected: false });
   }
 
@@ -474,25 +474,33 @@
 
   function drawCollectibles() {
     for (const c of state.collectibles) {
+      const bob = Math.sin(c.phase) * 4;
       ctx.save();
-      ctx.translate(c.x, c.y);
+      ctx.translate(c.x, c.y + bob);
       ctx.rotate(c.rot);
+      ctx.shadowColor = '#ffef83';
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = 'rgba(255,239,131,.22)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
       ctx.fillStyle = '#f54242';
       ctx.strokeStyle = '#10253b';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(0, 0, 16, Math.PI, 0);
+      ctx.arc(0, 0, 19, Math.PI, 0);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(0, 0, 16, 0, Math.PI);
+      ctx.arc(0, 0, 19, 0, Math.PI);
       ctx.fillStyle = '#f8fbff';
       ctx.fill();
       ctx.beginPath();
-      ctx.moveTo(-16, 0);
-      ctx.lineTo(16, 0);
+      ctx.moveTo(-19, 0);
+      ctx.lineTo(19, 0);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(0, 0, 6, 0, Math.PI * 2);
+      ctx.arc(0, 0, 7, 0, Math.PI * 2);
       ctx.fillStyle = '#f8fbff';
       ctx.fill();
       ctx.stroke();
@@ -658,4 +666,5 @@
     requestAnimationFrame(loop);
   }
 })();
+
 
