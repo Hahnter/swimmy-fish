@@ -20,6 +20,7 @@
   };
 
   const pokemonObstacles = ['tentacool', 'starmie', 'qwilfish'];
+  const pokemonNames = { tentacool: 'Tentacool', starmie: 'Starmie', qwilfish: 'Qwilfish' };
   const rand = (a, b) => a + Math.random() * (b - a);
   let loaded = 0;
   let state;
@@ -51,9 +52,11 @@
       mode,
       t: 0,
       bgx: 0,
-      fish: { x: Math.max(138, W * 0.22), y: H * 0.45, vy: 0, rot: 0 },
+      fish: { x: Math.max(138, W * 0.22), y: H * 0.45, vy: 0, rot: 0, trail: 0, wiggle: 0 },
       obstacles: [],
       bubbles: [],
+      swimBubbles: [],
+      popups: [],
       spawn: 0.45,
       score: 0,
       passed: 0,
@@ -200,6 +203,8 @@
       return;
     }
     const size = pokemonSize();
+    const top = pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))];
+    const bottom = pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))];
     state.obstacles.push({
       kind: 'pokemon',
       x: W + 110,
@@ -208,13 +213,14 @@
       gapY: cy,
       gap,
       passed: false,
-      top: pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))],
-      bottom: pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))],
+      top,
+      bottom,
       topPhase: rand(0, Math.PI * 2),
       bottomPhase: rand(0, Math.PI * 2),
       moveAmp: H > W ? 46 : 36,
       moveRate: rand(1.25, 2.15)
     });
+    addPopup('Wild ' + pokemonNames[top] + '!', W - 260, 108, '#ffef83');
   }
 
   function update(dt) {
@@ -229,6 +235,20 @@
       if (b.x < -40) b.x = W + 40;
     }
 
+    for (const b of state.swimBubbles) {
+      b.x -= (state.speed * 0.34 + b.vx) * dt;
+      b.y -= b.vy * dt;
+      b.life -= dt;
+      b.s += dt * 5;
+    }
+    state.swimBubbles = state.swimBubbles.filter(b => b.life > 0);
+
+    for (const p of state.popups) {
+      p.y -= 34 * dt;
+      p.life -= dt;
+    }
+    state.popups = state.popups.filter(p => p.life > 0);
+
     if (state.mode !== 'play') return;
 
     state.t += dt;
@@ -236,12 +256,27 @@
     state.speed = Math.min(350, 245 + state.t * 2.2);
     state.gap = Math.max(minGap(), baseGap() - state.t * 0.28);
     const f = state.fish;
+    f.wiggle += dt * (input.holding ? 18 : 8);
     const swimAccel = input.holding ? -1650 : 1120;
     f.vy += swimAccel * dt;
     f.vy = Math.max(-430, Math.min(620, f.vy));
     f.y += f.vy * dt;
     const targetRot = Math.max(-0.48, Math.min(0.86, f.vy / 680));
     f.rot += (targetRot - f.rot) * Math.min(1, dt * 10);
+    if (input.holding) {
+      f.trail -= dt;
+      if (f.trail <= 0) {
+        state.swimBubbles.push({
+          x: f.x - 38,
+          y: f.y + rand(-18, 18),
+          s: rand(3, 7),
+          vx: rand(8, 28),
+          vy: rand(18, 52),
+          life: rand(0.45, 0.8)
+        });
+        f.trail = 0.055;
+      }
+    }
 
     state.spawn -= dt;
     if (state.spawn <= 0) {
@@ -255,6 +290,7 @@
         o.passed = true;
         state.passed++;
         state.score = state.passed;
+        addPopup(state.passed % 5 === 0 ? 'Nice swim!' : 'Dodged!', f.x + 36, f.y - 28, '#b9fffb');
         beep(900, 0.035, 'square');
       }
       if (collide(o)) gameOver();
@@ -276,8 +312,10 @@
     const right = f.x + rx;
     const top = f.y - ry;
     const bottom = f.y + ry;
+    const obstacleLeft = Math.min(bounds.top.x, bounds.bottom.x);
+    const obstacleRight = Math.max(bounds.top.x + bounds.top.w, bounds.bottom.x + bounds.bottom.w);
 
-    if (right < o.x || left > o.x + o.w) return false;
+    if (right < obstacleLeft || left > obstacleRight) return false;
     if (bottom < bounds.top.y || top > bounds.bottom.y + bounds.bottom.h) return false;
 
     for (let y = top; y <= bottom; y += 8) {
@@ -313,12 +351,56 @@
         bottom: { x: o.x, y: gapBot, w: o.w, h: 720 }
       };
     }
-    const topDrift = Math.sin(state.t * o.moveRate + o.topPhase) * o.moveAmp;
-    const bottomDrift = Math.sin(state.t * o.moveRate + o.bottomPhase) * o.moveAmp;
+    const topMotion = pokemonMotion(o.top, o.topPhase, o.moveRate, o.moveAmp, 'top');
+    const bottomMotion = pokemonMotion(o.bottom, o.bottomPhase, o.moveRate, o.moveAmp, 'bottom');
     return {
-      top: { x: o.x, y: gapTop - o.size + topDrift, w: o.w, h: o.size },
-      bottom: { x: o.x, y: gapBot + bottomDrift, w: o.w, h: o.size }
+      top: {
+        x: o.x + topMotion.x,
+        y: gapTop - o.size + topMotion.y,
+        w: o.w * topMotion.scale,
+        h: o.size * topMotion.scale,
+        rot: topMotion.rot
+      },
+      bottom: {
+        x: o.x + bottomMotion.x,
+        y: gapBot + bottomMotion.y,
+        w: o.w * bottomMotion.scale,
+        h: o.size * bottomMotion.scale,
+        rot: bottomMotion.rot
+      }
     };
+  }
+
+  function pokemonMotion(kind, phase, rate, amp, side) {
+    const t = state.t * rate + phase;
+    if (kind === 'tentacool') {
+      return {
+        x: Math.sin(t * 0.7) * 12,
+        y: Math.sin(t) * amp,
+        scale: 1 + Math.sin(t * 1.8) * 0.035,
+        rot: Math.sin(t * 0.8) * 0.05
+      };
+    }
+    if (kind === 'starmie') {
+      const towardGap = side === 'top' ? 18 : -18;
+      return {
+        x: Math.sin(t * 0.65) * 8,
+        y: Math.sin(t * 0.9) * (amp * 0.48) + towardGap,
+        scale: 1,
+        rot: t * 1.65
+      };
+    }
+    return {
+      x: Math.sin(t * 1.2) * 10,
+      y: Math.sin(t) * (amp * 0.72),
+      scale: 1 + Math.max(0, Math.sin(t * 2.2)) * 0.16,
+      rot: Math.sin(t) * 0.1
+    };
+  }
+
+  function addPopup(text, x, y, color) {
+    state.popups.push({ text, x, y, color, life: 1.15 });
+    if (state.popups.length > 6) state.popups.shift();
   }
   function gameOver() {
     if (state.mode !== 'play') return;
@@ -349,6 +431,10 @@
       ctx.globalAlpha = 0.35 + b.s * 0.35;
       ctx.drawImage(img.bubble, b.x, b.y, 34 * b.s, 34 * b.s);
     }
+    for (const b of state.swimBubbles) {
+      ctx.globalAlpha = Math.max(0, b.life * 1.4);
+      ctx.drawImage(img.bubble, b.x, b.y, b.s, b.s);
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -363,7 +449,7 @@
         const pulse = Math.sin(state.t * o.moveRate + o.topPhase) * 0.08;
         ctx.globalAlpha = 0.96;
         ctx.translate(bounds.top.x + bounds.top.w / 2, bounds.top.y + bounds.top.h / 2);
-        ctx.rotate(pulse);
+        ctx.rotate((bounds.top.rot || 0) + pulse);
         ctx.drawImage(img[o.top], -bounds.top.w / 2, -bounds.top.h / 2, bounds.top.w, bounds.top.h);
         ctx.restore();
 
@@ -371,7 +457,7 @@
         const counterPulse = Math.sin(state.t * o.moveRate + o.bottomPhase) * -0.08;
         ctx.globalAlpha = 0.96;
         ctx.translate(bounds.bottom.x + bounds.bottom.w / 2, bounds.bottom.y + bounds.bottom.h / 2);
-        ctx.rotate(counterPulse);
+        ctx.rotate((bounds.bottom.rot || 0) + counterPulse);
         ctx.drawImage(img[o.bottom], -bounds.bottom.w / 2, -bounds.bottom.h / 2, bounds.bottom.w, bounds.bottom.h);
         ctx.restore();
       }
@@ -384,7 +470,9 @@
     ctx.translate(f.x, f.y);
     ctx.rotate(f.rot);
     ctx.scale(-1, 1);
-    const bob = state.mode === 'title' ? Math.sin(performance.now() / 260) * 6 : 0;
+    const bob = state.mode === 'title' ? Math.sin(performance.now() / 260) * 6 : Math.sin(f.wiggle) * 2.5;
+    const stretch = input.holding ? 1 + Math.sin(f.wiggle * 1.4) * 0.045 : 1;
+    ctx.scale(1 + (stretch - 1) * 0.8, 1 - (stretch - 1) * 0.55);
     ctx.drawImage(img.fish, -48, -48 + bob, 96, 96);
     ctx.restore();
   }
@@ -401,6 +489,22 @@
     ctx.textAlign = 'right';
     ctx.fillText('Magikarp Flap', W - 26, 48);
     ctx.textAlign = 'left';
+  }
+
+  function drawPopups() {
+    ctx.save();
+    ctx.textAlign = 'center';
+    for (const p of state.popups) {
+      const alpha = Math.min(1, p.life);
+      ctx.globalAlpha = alpha;
+      ctx.font = '900 20px system-ui, Segoe UI, sans-serif';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(0,22,40,.7)';
+      ctx.fillStyle = p.color;
+      ctx.strokeText(p.text, p.x, p.y);
+      ctx.fillText(p.text, p.x, p.y);
+    }
+    ctx.restore();
   }
 
   function overlay(title, sub) {
@@ -431,6 +535,7 @@
     drawObstacles();
     drawFish();
     panel();
+    drawPopups();
     if (state.mode === 'title') overlay('Magikarp Flap', 'Hold to swim up. Release to sink.');
     if (state.mode === 'over') overlay('Splash Down!', 'Final score: ' + state.score);
     if (state.hitFlash > 0) {
