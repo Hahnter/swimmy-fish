@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const canvas = document.getElementById('game');
+  const shell = document.getElementById('shell');
   const ctx = canvas.getContext('2d', { alpha: false });
   const muteBtn = document.getElementById('muteBtn');
   let W = canvas.width, H = canvas.height;
@@ -19,6 +20,7 @@
   };
 
   const pokemonObstacles = ['tentacool', 'starmie', 'qwilfish'];
+  const pokemonNames = { tentacool: 'Tentacool', starmie: 'Starmie', qwilfish: 'Qwilfish' };
   const rand = (a, b) => a + Math.random() * (b - a);
   let loaded = 0;
   let state;
@@ -50,14 +52,22 @@
       mode,
       t: 0,
       bgx: 0,
-      fish: { x: Math.max(138, W * 0.22), y: H * 0.45, vy: 0, rot: 0 },
+      fish: { x: Math.max(138, W * 0.22), y: H * 0.45, vy: 0, rot: 0, trail: 0, wiggle: 0 },
       obstacles: [],
       bubbles: [],
+      swimBubbles: [],
+      collectibles: [],
+      popups: [],
       spawn: 0.45,
+      collectibleSpawn: 0.65,
       score: 0,
       passed: 0,
+      splash: 0,
+      invuln: 0,
       speed: 245,
       gap: baseGap(),
+      route: 0,
+      routeFlash: 0,
       hitFlash: 0
     };
     for (let i = 0; i < 32; i++) {
@@ -88,8 +98,8 @@
     return H > W ? 220 : 170;
   }
 
-  function minGap() {
-    return H > W ? 178 : 142;
+  function hardMinGap() {
+    return H > W ? 166 : 132;
   }
 
   function pokemonSize() {
@@ -98,6 +108,30 @@
 
   function coralWidth() {
     return H > W ? 126 : 146;
+  }
+
+  function splashNeeded() {
+    return 5;
+  }
+
+  function routeLevel() {
+    return Math.floor((state?.passed || 0) / 10);
+  }
+
+  function routeName(level = routeLevel()) {
+    const names = ['Shallow Route', 'Kelp Channel', 'Deep Current', 'Abyssal Drift'];
+    return names[Math.min(level, names.length - 1)];
+  }
+
+  function pokemonChance() {
+    const passed = state?.passed || 0;
+    if (passed < 5) return 0;
+    if (passed < 12) return 0.32;
+    return Math.min(0.74, 0.46 + routeLevel() * 0.09);
+  }
+
+  function alpha(value) {
+    return value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
   }
 
   function createMasks() {
@@ -172,6 +206,19 @@
   canvas.addEventListener('pointercancel', stopSwim);
   canvas.addEventListener('pointerleave', stopSwim);
   window.addEventListener('blur', stopSwim);
+
+  function blockSelection(e) {
+    e.preventDefault();
+  }
+
+  [canvas, shell].forEach((el) => {
+    el.addEventListener('selectstart', blockSelection);
+    el.addEventListener('dragstart', blockSelection);
+    el.addEventListener('contextmenu', blockSelection);
+  });
+  document.addEventListener('selectionchange', () => {
+    if (state?.mode === 'play') window.getSelection()?.removeAllRanges();
+  });
   muteBtn.onclick = () => {
     muted = !muted;
     muteBtn.textContent = 'Sound: ' + (muted ? 'Off' : 'On');
@@ -181,11 +228,14 @@
     const margin = H > W ? 126 : 96;
     const gap = state.gap;
     const cy = rand(margin + gap / 2, H - margin - gap / 2);
-    if (Math.random() < 0.42) {
+    const route = routeLevel();
+    if (Math.random() >= pokemonChance()) {
       state.obstacles.push({ kind: 'coral', x: W + 110, w: coralWidth(), gapY: cy, gap, passed: false });
       return;
     }
     const size = pokemonSize();
+    const top = pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))];
+    const bottom = pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))];
     state.obstacles.push({
       kind: 'pokemon',
       x: W + 110,
@@ -194,13 +244,14 @@
       gapY: cy,
       gap,
       passed: false,
-      top: pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))],
-      bottom: pokemonObstacles[Math.floor(rand(0, pokemonObstacles.length))],
+      top,
+      bottom,
       topPhase: rand(0, Math.PI * 2),
       bottomPhase: rand(0, Math.PI * 2),
-      moveAmp: H > W ? 46 : 36,
-      moveRate: rand(1.25, 2.15)
+      moveAmp: (H > W ? 46 : 36) + Math.min(route * 7, 24),
+      moveRate: rand(1.25, 2.15) + Math.min(route * 0.16, 0.56)
     });
+    addPopup('Wild ' + pokemonNames[top] + '!', W - 260, 108, '#ffef83');
   }
 
   function update(dt) {
@@ -215,19 +266,59 @@
       if (b.x < -40) b.x = W + 40;
     }
 
+    for (const b of state.swimBubbles) {
+      b.x -= (state.speed * 0.34 + b.vx) * dt;
+      b.y -= b.vy * dt;
+      b.life -= dt;
+      b.s += dt * 5;
+    }
+    state.swimBubbles = state.swimBubbles.filter(b => b.life > 0);
+
+    for (const p of state.popups) {
+      p.y -= 34 * dt;
+      p.life -= dt;
+    }
+    state.popups = state.popups.filter(p => p.life > 0);
+
+    for (const c of state.collectibles) {
+      c.x -= state.speed * dt;
+      c.phase += dt * 5;
+      c.y += Math.sin(c.phase) * 18 * dt;
+      c.rot += dt * 2.4;
+    }
+    state.collectibles = state.collectibles.filter(c => c.x > -80 && !c.collected);
+
     if (state.mode !== 'play') return;
 
     state.t += dt;
+    state.invuln = Math.max(0, state.invuln - dt);
+    state.routeFlash = Math.max(0, state.routeFlash - dt);
     state.score = state.passed;
-    state.speed = Math.min(350, 245 + state.t * 2.2);
-    state.gap = Math.max(minGap(), baseGap() - state.t * 0.28);
+    const route = routeLevel();
+    state.speed = Math.min(405, 245 + state.t * 1.45 + state.passed * 3.1 + route * 10);
+    state.gap = Math.max(hardMinGap(), baseGap() - state.t * 0.16 - state.passed * 1.18 - route * 6);
     const f = state.fish;
+    f.wiggle += dt * (input.holding ? 18 : 8);
     const swimAccel = input.holding ? -1650 : 1120;
     f.vy += swimAccel * dt;
     f.vy = Math.max(-430, Math.min(620, f.vy));
     f.y += f.vy * dt;
     const targetRot = Math.max(-0.48, Math.min(0.86, f.vy / 680));
     f.rot += (targetRot - f.rot) * Math.min(1, dt * 10);
+    if (input.holding) {
+      f.trail -= dt;
+      if (f.trail <= 0) {
+        state.swimBubbles.push({
+          x: f.x - 38,
+          y: f.y + rand(-18, 18),
+          s: rand(3, 7),
+          vx: rand(8, 28),
+          vy: rand(18, 52),
+          life: rand(0.45, 0.8)
+        });
+        f.trail = 0.055;
+      }
+    }
 
     state.spawn -= dt;
     if (state.spawn <= 0) {
@@ -235,15 +326,38 @@
       state.spawn = Math.max(0.92, 1.55 - state.t * 0.012);
     }
 
+    state.collectibleSpawn -= dt;
+    if (state.collectibleSpawn <= 0) {
+      spawnCollectible();
+      state.collectibleSpawn = rand(1.45, 2.35);
+    }
+
+    collectItems();
+
     for (const o of state.obstacles) {
       o.x -= state.speed * dt;
       if (!o.passed && o.x + o.w < f.x - 35) {
         o.passed = true;
         state.passed++;
         state.score = state.passed;
+        const nextRoute = routeLevel();
+        if (nextRoute > state.route) {
+          state.route = nextRoute;
+          state.routeFlash = 2.35;
+          addPopup('Route gets deeper!', W / 2, H * 0.34, '#ffef83');
+          beep(520, 0.08, 'sawtooth');
+        }
+        addPopup(state.passed % 5 === 0 ? 'Nice swim!' : 'Dodged!', f.x + 36, f.y - 28, '#b9fffb');
         beep(900, 0.035, 'square');
       }
-      if (collide(o)) gameOver();
+      if (collide(o)) {
+        if (state.invuln > 0) continue;
+        if (state.splash >= splashNeeded()) {
+          triggerSplash();
+        } else {
+          gameOver();
+        }
+      }
     }
 
     // Critical performance fix: keep the active obstacle list small forever.
@@ -262,8 +376,10 @@
     const right = f.x + rx;
     const top = f.y - ry;
     const bottom = f.y + ry;
+    const obstacleLeft = Math.min(bounds.top.x, bounds.bottom.x);
+    const obstacleRight = Math.max(bounds.top.x + bounds.top.w, bounds.bottom.x + bounds.bottom.w);
 
-    if (right < o.x || left > o.x + o.w) return false;
+    if (right < obstacleLeft || left > obstacleRight) return false;
     if (bottom < bounds.top.y || top > bounds.bottom.y + bounds.bottom.h) return false;
 
     for (let y = top; y <= bottom; y += 8) {
@@ -283,6 +399,34 @@
     return false;
   }
 
+  function collectItems() {
+    const f = state.fish;
+    for (const c of state.collectibles) {
+      const d = Math.hypot(f.x - c.x, f.y - c.y);
+      if (d > 48) continue;
+      c.collected = true;
+      state.splash = Math.min(splashNeeded(), state.splash + 1);
+      addPopup(state.splash >= splashNeeded() ? 'Splash ready!' : '+Splash', c.x, c.y - 18, '#ffef83');
+      beep(state.splash >= splashNeeded() ? 1040 : 760, 0.045, 'square');
+    }
+  }
+
+  function spawnCollectible() {
+    const nextObstacle = state.obstacles.find(o => o.x > W * 0.42) || state.obstacles[state.obstacles.length - 1];
+    const laneY = nextObstacle ? nextObstacle.gapY : H * 0.5;
+    const x = W + rand(40, 120);
+    const y = Math.max(82, Math.min(H - 82, laneY + rand(-state.gap * 0.22, state.gap * 0.22)));
+    state.collectibles.push({ x, y, phase: rand(0, Math.PI * 2), rot: rand(0, Math.PI * 2), collected: false });
+  }
+
+  function triggerSplash() {
+    state.splash = 0;
+    state.invuln = 1.25;
+    state.hitFlash = 0.5;
+    addPopup('Splash!', state.fish.x + 45, state.fish.y - 38, '#ffffff');
+    beep(1180, 0.11, 'triangle');
+  }
+
   function alphaHit(mask, worldX, worldY, drawX, drawY, drawW, drawH) {
     const localX = Math.floor((worldX - drawX) / drawW * mask.w);
     const localY = Math.floor((worldY - drawY) / drawH * mask.h);
@@ -299,12 +443,56 @@
         bottom: { x: o.x, y: gapBot, w: o.w, h: 720 }
       };
     }
-    const topDrift = Math.sin(state.t * o.moveRate + o.topPhase) * o.moveAmp;
-    const bottomDrift = Math.sin(state.t * o.moveRate + o.bottomPhase) * o.moveAmp;
+    const topMotion = pokemonMotion(o.top, o.topPhase, o.moveRate, o.moveAmp, 'top');
+    const bottomMotion = pokemonMotion(o.bottom, o.bottomPhase, o.moveRate, o.moveAmp, 'bottom');
     return {
-      top: { x: o.x, y: gapTop - o.size + topDrift, w: o.w, h: o.size },
-      bottom: { x: o.x, y: gapBot + bottomDrift, w: o.w, h: o.size }
+      top: {
+        x: o.x + topMotion.x,
+        y: gapTop - o.size + topMotion.y,
+        w: o.w * topMotion.scale,
+        h: o.size * topMotion.scale,
+        rot: topMotion.rot
+      },
+      bottom: {
+        x: o.x + bottomMotion.x,
+        y: gapBot + bottomMotion.y,
+        w: o.w * bottomMotion.scale,
+        h: o.size * bottomMotion.scale,
+        rot: bottomMotion.rot
+      }
     };
+  }
+
+  function pokemonMotion(kind, phase, rate, amp, side) {
+    const t = state.t * rate + phase;
+    if (kind === 'tentacool') {
+      return {
+        x: Math.sin(t * 0.7) * 12,
+        y: Math.sin(t) * amp,
+        scale: 1 + Math.sin(t * 1.8) * 0.035,
+        rot: Math.sin(t * 0.8) * 0.05
+      };
+    }
+    if (kind === 'starmie') {
+      const towardGap = side === 'top' ? 18 : -18;
+      return {
+        x: Math.sin(t * 0.65) * 8,
+        y: Math.sin(t * 0.9) * (amp * 0.48) + towardGap,
+        scale: 1,
+        rot: t * 1.65
+      };
+    }
+    return {
+      x: Math.sin(t * 1.2) * 10,
+      y: Math.sin(t) * (amp * 0.72),
+      scale: 1 + Math.max(0, Math.sin(t * 2.2)) * 0.16,
+      rot: Math.sin(t) * 0.1
+    };
+  }
+
+  function addPopup(text, x, y, color) {
+    state.popups.push({ text, x, y, color, life: 1.15 });
+    if (state.popups.length > 6) state.popups.shift();
   }
   function gameOver() {
     if (state.mode !== 'play') return;
@@ -316,24 +504,66 @@
     beep(130, 0.18, 'sawtooth');
   }
 
+  function drawCollectibles() {
+    for (const c of state.collectibles) {
+      const bob = Math.sin(c.phase) * 4;
+      ctx.save();
+      ctx.translate(c.x, c.y + bob);
+      ctx.rotate(c.rot);
+      ctx.shadowColor = '#ffef83';
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = 'rgba(255,239,131,.22)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#f54242';
+      ctx.strokeStyle = '#10253b';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 19, Math.PI, 0);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, 19, 0, Math.PI);
+      ctx.fillStyle = '#f8fbff';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-19, 0);
+      ctx.lineTo(19, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#f8fbff';
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   function drawBg() {
     const bgWidth = img.bg.naturalWidth || 1024;
     const x = -state.bgx;
+    const route = routeLevel();
     // Draw enough copies to cover the canvas at all offsets. No blank seam, ever.
     for (let tx = x - bgWidth; tx < W + bgWidth; tx += bgWidth) {
       ctx.drawImage(img.bg, Math.floor(tx), 0, bgWidth, H);
     }
 
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, 'rgba(176,248,255,.14)');
-    g.addColorStop(0.55, 'rgba(0,72,122,.04)');
-    g.addColorStop(1, 'rgba(0,15,38,.26)');
+    const depth = Math.min(route, 4);
+    g.addColorStop(0, `rgba(${Math.max(92, 176 - depth * 24)},${Math.max(178, 248 - depth * 16)},255,${alpha(0.14 + depth * 0.025)})`);
+    g.addColorStop(0.55, `rgba(0,${Math.max(34, 72 - depth * 9)},${Math.max(80, 122 - depth * 8)},${alpha(0.04 + depth * 0.035)})`);
+    g.addColorStop(1, `rgba(0,${Math.max(6, 15 - depth * 2)},${Math.max(26, 38 - depth * 3)},${alpha(0.26 + depth * 0.055)})`);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
     for (const b of state.bubbles) {
       ctx.globalAlpha = 0.35 + b.s * 0.35;
       ctx.drawImage(img.bubble, b.x, b.y, 34 * b.s, 34 * b.s);
+    }
+    for (const b of state.swimBubbles) {
+      ctx.globalAlpha = Math.max(0, b.life * 1.4);
+      ctx.drawImage(img.bubble, b.x, b.y, b.s, b.s);
     }
     ctx.globalAlpha = 1;
   }
@@ -349,7 +579,7 @@
         const pulse = Math.sin(state.t * o.moveRate + o.topPhase) * 0.08;
         ctx.globalAlpha = 0.96;
         ctx.translate(bounds.top.x + bounds.top.w / 2, bounds.top.y + bounds.top.h / 2);
-        ctx.rotate(pulse);
+        ctx.rotate((bounds.top.rot || 0) + pulse);
         ctx.drawImage(img[o.top], -bounds.top.w / 2, -bounds.top.h / 2, bounds.top.w, bounds.top.h);
         ctx.restore();
 
@@ -357,7 +587,7 @@
         const counterPulse = Math.sin(state.t * o.moveRate + o.bottomPhase) * -0.08;
         ctx.globalAlpha = 0.96;
         ctx.translate(bounds.bottom.x + bounds.bottom.w / 2, bounds.bottom.y + bounds.bottom.h / 2);
-        ctx.rotate(counterPulse);
+        ctx.rotate((bounds.bottom.rot || 0) + counterPulse);
         ctx.drawImage(img[o.bottom], -bounds.bottom.w / 2, -bounds.bottom.h / 2, bounds.bottom.w, bounds.bottom.h);
         ctx.restore();
       }
@@ -370,9 +600,21 @@
     ctx.translate(f.x, f.y);
     ctx.rotate(f.rot);
     ctx.scale(-1, 1);
-    const bob = state.mode === 'title' ? Math.sin(performance.now() / 260) * 6 : 0;
+    const bob = state.mode === 'title' ? Math.sin(performance.now() / 260) * 6 : Math.sin(f.wiggle) * 2.5;
+    const stretch = input.holding ? 1 + Math.sin(f.wiggle * 1.4) * 0.045 : 1;
+    ctx.scale(1 + (stretch - 1) * 0.8, 1 - (stretch - 1) * 0.55);
     ctx.drawImage(img.fish, -48, -48 + bob, 96, 96);
     ctx.restore();
+    if (state.invuln > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.35 + Math.sin(state.t * 24) * 0.18;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, 52 + Math.sin(state.t * 12) * 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   function panel() {
@@ -384,9 +626,66 @@
     ctx.fillStyle = '#dffcff';
     ctx.fillText('Score: ' + state.score, 32, 48);
     ctx.fillText('Best: ' + best, 32, 82);
+    const meterX = H > W ? 32 : 318;
+    const meterY = H > W ? 106 : 30;
+    const meterW = H > W ? 190 : 160;
+    ctx.fillStyle = 'rgba(185,255,251,.25)';
+    ctx.fillRect(meterX, meterY, meterW, 18);
+    ctx.fillStyle = state.splash >= splashNeeded() ? '#ffef83' : '#7eeaff';
+    ctx.fillRect(meterX, meterY, meterW * (state.splash / splashNeeded()), 18);
+    ctx.strokeStyle = '#dffcff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(meterX, meterY, meterW, 18);
+    ctx.fillStyle = '#dffcff';
+    ctx.font = '800 14px system-ui, Segoe UI, sans-serif';
+    ctx.fillText('Splash', meterX, meterY + 38);
     ctx.textAlign = 'right';
-    ctx.fillText('Magikarp Flap', W - 26, 48);
+    ctx.fillText(routeName(), W - 26, 48);
+    ctx.fillText('Depth ' + (routeLevel() + 1), W - 26, 72);
     ctx.textAlign = 'left';
+  }
+
+  function drawPopups() {
+    ctx.save();
+    ctx.textAlign = 'center';
+    for (const p of state.popups) {
+      const alpha = Math.min(1, p.life);
+      ctx.globalAlpha = alpha;
+      ctx.font = '900 20px system-ui, Segoe UI, sans-serif';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(0,22,40,.7)';
+      ctx.fillStyle = p.color;
+      ctx.strokeText(p.text, p.x, p.y);
+      ctx.fillText(p.text, p.x, p.y);
+    }
+    ctx.restore();
+  }
+
+  function drawRouteTransition() {
+    if (!state.routeFlash) return;
+    const alpha = Math.min(1, state.routeFlash / 1.2);
+    const bandH = H > W ? 124 : 106;
+    const y = H * 0.38 - bandH / 2;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,27,50,.74)';
+    ctx.fillRect(0, y, W, bandH);
+    ctx.strokeStyle = 'rgba(185,255,251,.58)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, y + 3);
+    ctx.lineTo(W, y + 3);
+    ctx.moveTo(0, y + bandH - 3);
+    ctx.lineTo(W, y + bandH - 3);
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffef83';
+    ctx.font = '900 28px system-ui, Segoe UI, sans-serif';
+    ctx.fillText('Route gets deeper', W / 2, y + 46);
+    ctx.fillStyle = '#dffcff';
+    ctx.font = '900 18px system-ui, Segoe UI, sans-serif';
+    ctx.fillText(routeName(), W / 2, y + 78);
+    ctx.restore();
   }
 
   function overlay(title, sub) {
@@ -415,8 +714,11 @@
     ctx.clearRect(0, 0, W, H);
     drawBg();
     drawObstacles();
+    drawCollectibles();
     drawFish();
     panel();
+    drawPopups();
+    drawRouteTransition();
     if (state.mode === 'title') overlay('Magikarp Flap', 'Hold to swim up. Release to sink.');
     if (state.mode === 'over') overlay('Splash Down!', 'Final score: ' + state.score);
     if (state.hitFlash > 0) {
@@ -427,3 +729,5 @@
     requestAnimationFrame(loop);
   }
 })();
+
+

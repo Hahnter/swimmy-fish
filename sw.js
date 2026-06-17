@@ -1,4 +1,4 @@
-const CACHE_NAME = 'magikarp-flap-v5';
+const CACHE_NAME = 'magikarp-flap-v6';
 const APP_SHELL = './index.html';
 const ASSETS = [
   './style.css',
@@ -83,14 +83,17 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      const network = fetch(event.request).then((response) => {
+      return fetch(event.request).then((response) => {
         if (response && response.ok) {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
         }
         return response;
-      }).catch(() => cached);
-      return cached || network;
+      }).catch(() => cached || new Response('Asset is not available offline yet.', {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      }));
     })
   );
 });
