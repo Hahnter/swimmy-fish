@@ -66,6 +66,8 @@
       invuln: 0,
       speed: 245,
       gap: baseGap(),
+      route: 0,
+      routeFlash: 0,
       hitFlash: 0
     };
     for (let i = 0; i < 32; i++) {
@@ -96,8 +98,8 @@
     return H > W ? 220 : 170;
   }
 
-  function minGap() {
-    return H > W ? 178 : 142;
+  function hardMinGap() {
+    return H > W ? 166 : 132;
   }
 
   function pokemonSize() {
@@ -110,6 +112,26 @@
 
   function splashNeeded() {
     return 5;
+  }
+
+  function routeLevel() {
+    return Math.floor((state?.passed || 0) / 10);
+  }
+
+  function routeName(level = routeLevel()) {
+    const names = ['Shallow Route', 'Kelp Channel', 'Deep Current', 'Abyssal Drift'];
+    return names[Math.min(level, names.length - 1)];
+  }
+
+  function pokemonChance() {
+    const passed = state?.passed || 0;
+    if (passed < 5) return 0;
+    if (passed < 12) return 0.32;
+    return Math.min(0.74, 0.46 + routeLevel() * 0.09);
+  }
+
+  function alpha(value) {
+    return value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
   }
 
   function createMasks() {
@@ -206,7 +228,8 @@
     const margin = H > W ? 126 : 96;
     const gap = state.gap;
     const cy = rand(margin + gap / 2, H - margin - gap / 2);
-    if (Math.random() < 0.42) {
+    const route = routeLevel();
+    if (Math.random() >= pokemonChance()) {
       state.obstacles.push({ kind: 'coral', x: W + 110, w: coralWidth(), gapY: cy, gap, passed: false });
       return;
     }
@@ -225,8 +248,8 @@
       bottom,
       topPhase: rand(0, Math.PI * 2),
       bottomPhase: rand(0, Math.PI * 2),
-      moveAmp: H > W ? 46 : 36,
-      moveRate: rand(1.25, 2.15)
+      moveAmp: (H > W ? 46 : 36) + Math.min(route * 7, 24),
+      moveRate: rand(1.25, 2.15) + Math.min(route * 0.16, 0.56)
     });
     addPopup('Wild ' + pokemonNames[top] + '!', W - 260, 108, '#ffef83');
   }
@@ -269,9 +292,11 @@
 
     state.t += dt;
     state.invuln = Math.max(0, state.invuln - dt);
+    state.routeFlash = Math.max(0, state.routeFlash - dt);
     state.score = state.passed;
-    state.speed = Math.min(350, 245 + state.t * 2.2);
-    state.gap = Math.max(minGap(), baseGap() - state.t * 0.28);
+    const route = routeLevel();
+    state.speed = Math.min(405, 245 + state.t * 1.45 + state.passed * 3.1 + route * 10);
+    state.gap = Math.max(hardMinGap(), baseGap() - state.t * 0.16 - state.passed * 1.18 - route * 6);
     const f = state.fish;
     f.wiggle += dt * (input.holding ? 18 : 8);
     const swimAccel = input.holding ? -1650 : 1120;
@@ -315,6 +340,13 @@
         o.passed = true;
         state.passed++;
         state.score = state.passed;
+        const nextRoute = routeLevel();
+        if (nextRoute > state.route) {
+          state.route = nextRoute;
+          state.routeFlash = 2.35;
+          addPopup('Route gets deeper!', W / 2, H * 0.34, '#ffef83');
+          beep(520, 0.08, 'sawtooth');
+        }
         addPopup(state.passed % 5 === 0 ? 'Nice swim!' : 'Dodged!', f.x + 36, f.y - 28, '#b9fffb');
         beep(900, 0.035, 'square');
       }
@@ -511,15 +543,17 @@
   function drawBg() {
     const bgWidth = img.bg.naturalWidth || 1024;
     const x = -state.bgx;
+    const route = routeLevel();
     // Draw enough copies to cover the canvas at all offsets. No blank seam, ever.
     for (let tx = x - bgWidth; tx < W + bgWidth; tx += bgWidth) {
       ctx.drawImage(img.bg, Math.floor(tx), 0, bgWidth, H);
     }
 
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, 'rgba(176,248,255,.14)');
-    g.addColorStop(0.55, 'rgba(0,72,122,.04)');
-    g.addColorStop(1, 'rgba(0,15,38,.26)');
+    const depth = Math.min(route, 4);
+    g.addColorStop(0, `rgba(${Math.max(92, 176 - depth * 24)},${Math.max(178, 248 - depth * 16)},255,${alpha(0.14 + depth * 0.025)})`);
+    g.addColorStop(0.55, `rgba(0,${Math.max(34, 72 - depth * 9)},${Math.max(80, 122 - depth * 8)},${alpha(0.04 + depth * 0.035)})`);
+    g.addColorStop(1, `rgba(0,${Math.max(6, 15 - depth * 2)},${Math.max(26, 38 - depth * 3)},${alpha(0.26 + depth * 0.055)})`);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
@@ -606,7 +640,8 @@
     ctx.font = '800 14px system-ui, Segoe UI, sans-serif';
     ctx.fillText('Splash', meterX, meterY + 38);
     ctx.textAlign = 'right';
-    ctx.fillText('Magikarp Flap', W - 26, 48);
+    ctx.fillText(routeName(), W - 26, 48);
+    ctx.fillText('Depth ' + (routeLevel() + 1), W - 26, 72);
     ctx.textAlign = 'left';
   }
 
@@ -623,6 +658,33 @@
       ctx.strokeText(p.text, p.x, p.y);
       ctx.fillText(p.text, p.x, p.y);
     }
+    ctx.restore();
+  }
+
+  function drawRouteTransition() {
+    if (!state.routeFlash) return;
+    const alpha = Math.min(1, state.routeFlash / 1.2);
+    const bandH = H > W ? 124 : 106;
+    const y = H * 0.38 - bandH / 2;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,27,50,.74)';
+    ctx.fillRect(0, y, W, bandH);
+    ctx.strokeStyle = 'rgba(185,255,251,.58)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, y + 3);
+    ctx.lineTo(W, y + 3);
+    ctx.moveTo(0, y + bandH - 3);
+    ctx.lineTo(W, y + bandH - 3);
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffef83';
+    ctx.font = '900 28px system-ui, Segoe UI, sans-serif';
+    ctx.fillText('Route gets deeper', W / 2, y + 46);
+    ctx.fillStyle = '#dffcff';
+    ctx.font = '900 18px system-ui, Segoe UI, sans-serif';
+    ctx.fillText(routeName(), W / 2, y + 78);
     ctx.restore();
   }
 
@@ -656,6 +718,7 @@
     drawFish();
     panel();
     drawPopups();
+    drawRouteTransition();
     if (state.mode === 'title') overlay('Magikarp Flap', 'Hold to swim up. Release to sink.');
     if (state.mode === 'over') overlay('Splash Down!', 'Final score: ' + state.score);
     if (state.hitFlash > 0) {
