@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const canvas = document.getElementById('game');
+  const shell = document.getElementById('shell');
   const ctx = canvas.getContext('2d', { alpha: false });
   const muteBtn = document.getElementById('muteBtn');
   let W = canvas.width, H = canvas.height;
@@ -172,6 +173,19 @@
   canvas.addEventListener('pointercancel', stopSwim);
   canvas.addEventListener('pointerleave', stopSwim);
   window.addEventListener('blur', stopSwim);
+
+  function blockSelection(e) {
+    e.preventDefault();
+  }
+
+  [canvas, shell].forEach((el) => {
+    el.addEventListener('selectstart', blockSelection);
+    el.addEventListener('dragstart', blockSelection);
+    el.addEventListener('contextmenu', blockSelection);
+  });
+  document.addEventListener('selectionchange', () => {
+    if (state?.mode === 'play') window.getSelection()?.removeAllRanges();
+  });
   muteBtn.onclick = () => {
     muted = !muted;
     muteBtn.textContent = 'Sound: ' + (muted ? 'Off' : 'On');
@@ -427,3 +441,4 @@
     requestAnimationFrame(loop);
   }
 })();
+
