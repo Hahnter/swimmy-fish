@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hahnter-arcade-v3';
+const CACHE_NAME = 'hahnter-arcade-v4';
 const HUB_SHELL = './index.html';
 const ASSETS = [
   './',
@@ -17,7 +17,7 @@ const ASSETS = [
   './games/magikarp-flap/assets/tentacool_pokeapi_72.png',
   './games/magikarp-flap/assets/starmie_pokeapi_121.png',
   './games/magikarp-flap/assets/qwilfish_pokeapi_211.png',
-  './games/magikarp-flap/assets/swimmy_fish_game.png',
+  './games/magikarp-flap/assets/screenshot.png',
   './games/magikarp-flap/assets/icon-192.png',
   './games/magikarp-flap/assets/icon-512.png',
   './games/starmie-breaker/index.html',
