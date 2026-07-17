@@ -1,26 +1,21 @@
 {
-  "name": "Magikarp Flap",
-  "short_name": "Magikarp",
-  "description": "A Flappy Bird-style underwater canvas game.",
-  "start_url": "./index.html",
+  "name": "Hahnter Arcade",
+  "short_name": "Arcade",
+  "description": "A growing hub of small browser games.",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#021522",
-  "theme_color": "#021522",
+  "background_color": "#050915",
+  "theme_color": "#050915",
   "icons": [
     {
-      "src": "assets/magikarp_pokeapi_129.png",
-      "sizes": "96x96",
-      "type": "image/png"
-    },
-    {
-      "src": "assets/icon-192.png",
+      "src": "games/magikarp-flap/assets/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "assets/icon-512.png",
+      "src": "games/magikarp-flap/assets/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
