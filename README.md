@@ -10,6 +10,7 @@ under `games/` and links back to the hub.
   the hub and every game work offline once loaded.
 - `games/magikarp-flap/` — the first game (see below). New games get their own
   folder here plus a card on the hub page.
+- `games/starmie-breaker/` — the second game (see below).
 
 ## Adding a new game
 1. Create `games/<your-game>/` with its own `index.html` and assets.
@@ -46,6 +47,27 @@ chase a better local high score.
 - Kept from earlier builds: PokeAPI sprites, alpha-mask collision, Splash
   meter collectibles, route difficulty waves, capped obstacle arrays and a
   single requestAnimationFrame loop.
+
+## Starmie Breaker
+
+An underwater brick breaker. Bounce the Pokeball off a coral paddle, smash the
+reef wall wave by wave, and clip the roaming Starmie mid-spin for +75 bonus
+points.
+
+### Controls
+- Mouse / touch / Arrow keys: move the paddle
+- Space / tap: launch the ball (and restart after a wipeout)
+- R: back to title
+- P: pause / resume (also auto-pauses when the tab is hidden)
+
+### Features
+- Chain scoring: every brick broken before the ball returns to the paddle is
+  worth more (10 x chain).
+- Power-ups drop from bricks: Wide Coral, Multi Ball, Slow Tide, and a rare
+  +1 Life.
+- Waves get faster, add rows, armored top bricks, and checkerboard layouts.
+- Same presentation kit as Magikarp Flap: ocean gradient with god rays,
+  plankton motes, vignette, particles, screen shake, and popups.
 
 ## Hosting
 Upload this folder to any static host, including Cloudflare Pages or GitHub
