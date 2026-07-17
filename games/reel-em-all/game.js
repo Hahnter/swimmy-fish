@@ -235,19 +235,41 @@
     if (e.code === 'ArrowUp') input.keys.up = false;
     if (e.code === 'ArrowDown') input.keys.down = false;
   });
+  // Touch steers by dragging anywhere on screen (relative, so the finger
+  // never has to cover the hook); mouse keeps direct cursor control.
+  const drag = { active: false, lastX: 0, lastY: 0 };
   canvas.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    canvas.setPointerCapture?.(e.pointerId);
-    moveHookTo(e.clientX, e.clientY);
+    try { canvas.setPointerCapture(e.pointerId); } catch {}
+    if (e.pointerType === 'mouse') {
+      moveHookTo(e.clientX, e.clientY);
+    } else {
+      drag.active = true;
+      drag.lastX = e.clientX;
+      drag.lastY = e.clientY;
+    }
     startAction();
   });
   canvas.addEventListener('pointermove', (e) => {
     if (!state) return;
-    moveHookTo(e.clientX, e.clientY);
+    if (e.pointerType === 'mouse') {
+      moveHookTo(e.clientX, e.clientY);
+      return;
+    }
+    if (!drag.active) return;
+    const rect = canvas.getBoundingClientRect();
+    const scale = W / rect.width * 1.35;
+    state.hook.tx += (e.clientX - drag.lastX) * scale;
+    state.hook.ty += (e.clientY - drag.lastY) * scale;
+    drag.lastX = e.clientX;
+    drag.lastY = e.clientY;
+    state.hook.tx = Math.max(20, Math.min(W - 20, state.hook.tx));
+    state.hook.ty = Math.max(waterTop() - 14, Math.min(waterBottom(), state.hook.ty));
   });
-  canvas.addEventListener('pointerup', stopAction);
-  canvas.addEventListener('pointercancel', stopAction);
-  canvas.addEventListener('pointerleave', stopAction);
+  const endPointer = () => { drag.active = false; stopAction(); };
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('pointerleave', endPointer);
   window.addEventListener('blur', stopAction);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && state?.mode === 'play') { state.mode = 'pause'; input.holding = false; }
@@ -875,7 +897,7 @@
     drawPopups();
     if (state.mode === 'title') {
       overlay('Reel \'Em All', 'Hook wild Pokemon. Reel with care. Beat the clock.',
-        'MOVE the hook - HOLD to reel (release when struggling) - dodge Tentacool & Qwilfish');
+        'DRAG anywhere to steer - HOLD to reel (release when struggling) - dodge Tentacool & Qwilfish');
     }
     if (state.mode === 'pause') overlay('Paused', 'The fish can wait.', 'PRESS / TOUCH or P to resume');
     if (state.mode === 'over') drawGameOver();
