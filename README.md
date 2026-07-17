@@ -11,6 +11,7 @@ under `games/` and links back to the hub.
 - `games/magikarp-flap/` — the first game (see below). New games get their own
   folder here plus a card on the hub page.
 - `games/starmie-breaker/` — the second game (see below).
+- `games/reel-em-all/` — the third game (see below).
 
 ## Adding a new game
 1. Create `games/<your-game>/` with its own `index.html` and assets.
@@ -68,6 +69,28 @@ points.
 - Waves get faster, add rows, armored top bricks, and checkerboard layouts.
 - Same presentation kit as Magikarp Flap: ocean gradient with god rays,
   plankton motes, vignette, particles, screen shake, and popups.
+
+## Reel 'Em All
+
+A Pokemon fishing arcade game. Steer your hook through the water column, hook
+wild water Pokemon, and win the reel-in: hold to reel, release when the fish
+struggles or your line snaps. Deeper Pokemon are rarer and worth more.
+
+### Controls
+- Mouse / touch / Arrow keys: steer the hook
+- Hold Space / press / touch: reel (release while the fish struggles)
+- R: back to title
+- P: pause / resume (also auto-pauses when the tab is hidden)
+
+### Features
+- Eight catchable species from Magikarp (5 pts) down to deep-water Gyarados
+  (100) and Lapras (150), spawned by rarity weight and depth band.
+- Reel minigame with progress and tension bars; struggling fish spike tension.
+- Tentacool and Qwilfish sting your line: hook stunned, -3s, hooked fish lost.
+- Every catch adds time (+4/6/8s by rarity, capped at 99s) to keep the
+  session alive; results screen shows a Pokedex tally of the run.
+- Same presentation kit as the other games, plus a sunset sky, waterline, and
+  bobber above the water.
 
 ## Hosting
 Upload this folder to any static host, including Cloudflare Pages or GitHub
