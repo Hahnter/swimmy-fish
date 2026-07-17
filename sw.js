@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hahnter-arcade-v4';
+const CACHE_NAME = 'hahnter-arcade-v5';
 const HUB_SHELL = './index.html';
 const ASSETS = [
   './',

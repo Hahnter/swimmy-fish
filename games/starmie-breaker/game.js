@@ -209,16 +209,36 @@
     if (e.code === 'ArrowLeft') keys.left = false;
     if (e.code === 'ArrowRight') keys.right = false;
   });
+  // Touch steers by dragging anywhere on screen (relative, so the finger
+  // never has to cover the paddle); mouse keeps direct cursor control.
+  const drag = { active: false, lastX: 0 };
   canvas.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    canvas.setPointerCapture?.(e.pointerId);
-    movePaddleTo(e.clientX);
+    try { canvas.setPointerCapture(e.pointerId); } catch {}
+    if (e.pointerType === 'mouse') {
+      movePaddleTo(e.clientX);
+    } else {
+      drag.active = true;
+      drag.lastX = e.clientX;
+    }
     launch();
   });
   canvas.addEventListener('pointermove', (e) => {
     if (!state) return;
-    movePaddleTo(e.clientX);
+    if (e.pointerType === 'mouse') {
+      movePaddleTo(e.clientX);
+      return;
+    }
+    if (!drag.active) return;
+    const rect = canvas.getBoundingClientRect();
+    const dx = (e.clientX - drag.lastX) / rect.width * W * 1.4;
+    drag.lastX = e.clientX;
+    state.paddle.x = Math.max(state.paddle.w / 2, Math.min(W - state.paddle.w / 2, state.paddle.x + dx));
+    for (const b of state.balls) if (b.stuck) b.x = state.paddle.x;
   });
+  const endDrag = () => { drag.active = false; };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && state?.mode === 'play') state.mode = 'pause';
   });
@@ -814,7 +834,7 @@
     drawPopups();
     if (state.mode === 'title') {
       overlay('Starmie Breaker', 'Bounce the Pokeball. Smash the coral wall.',
-        'MOVE mouse / touch / arrows - SPACE or tap to launch - P to pause');
+        'DRAG anywhere / mouse / arrows - SPACE or tap to launch - P to pause');
     }
     if (state.mode === 'pause') overlay('Paused', 'Take a breather.', 'PRESS / TOUCH or P to resume');
     if (state.mode === 'over') {
