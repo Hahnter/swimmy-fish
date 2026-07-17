@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hahnter-arcade-v2';
+const CACHE_NAME = 'hahnter-arcade-v3';
 const HUB_SHELL = './index.html';
 const ASSETS = [
   './',
@@ -29,7 +29,26 @@ const ASSETS = [
   './games/starmie-breaker/assets/bubble.png',
   './games/starmie-breaker/assets/screenshot.png',
   './games/starmie-breaker/assets/icon-192.png',
-  './games/starmie-breaker/assets/icon-512.png'
+  './games/starmie-breaker/assets/icon-512.png',
+  './games/reel-em-all/index.html',
+  './games/reel-em-all/style.css',
+  './games/reel-em-all/game.js',
+  './games/reel-em-all/manifest.webmanifest',
+  './games/reel-em-all/assets/underwater_background_tile.png',
+  './games/reel-em-all/assets/bubble.png',
+  './games/reel-em-all/assets/magikarp_pokeapi_129.png',
+  './games/reel-em-all/assets/poliwag_pokeapi_60.png',
+  './games/reel-em-all/assets/goldeen_pokeapi_118.png',
+  './games/reel-em-all/assets/horsea_pokeapi_116.png',
+  './games/reel-em-all/assets/shellder_pokeapi_90.png',
+  './games/reel-em-all/assets/starmie_pokeapi_121.png',
+  './games/reel-em-all/assets/gyarados_pokeapi_130.png',
+  './games/reel-em-all/assets/lapras_pokeapi_131.png',
+  './games/reel-em-all/assets/tentacool_pokeapi_72.png',
+  './games/reel-em-all/assets/qwilfish_pokeapi_211.png',
+  './games/reel-em-all/assets/screenshot.png',
+  './games/reel-em-all/assets/icon-192.png',
+  './games/reel-em-all/assets/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
