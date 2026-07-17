@@ -1,0 +1,23 @@
+{
+  "name": "Starmie Breaker",
+  "short_name": "Starmie",
+  "description": "An underwater brick breaker with a coral paddle and a bouncing Starmie bonus.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#021522",
+  "theme_color": "#021522",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -2,22 +2,79 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <meta name="theme-color" content="#021522" />
-  <title>Magikarp Flap</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#050915" />
+  <meta name="description" content="Hahnter Arcade — a growing collection of small browser games. Pick a cabinet and play." />
+  <title>Hahnter Arcade</title>
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="games/magikarp-flap/assets/icon-192.png" />
+  <link rel="stylesheet" href="hub.css" />
 </head>
 <body>
-  <div id="shell">
-    <header>
-      <div><h1>Magikarp Flap</h1><p>HOLD SPACE / PRESS / TOUCH to swim up. Release to sink.</p></div>
-      <button id="muteBtn" aria-label="Toggle sound">Sound: On</button>
-    </header>
-    <canvas id="game" width="960" height="540" aria-label="Magikarp Flap game canvas"></canvas>
-    <footer>Best score is saved locally. Host this folder anywhere static, including Cloudflare Pages.</footer>
+  <div class="ocean" aria-hidden="true">
+    <span class="ray r1"></span><span class="ray r2"></span><span class="ray r3"></span>
+    <span class="bub b1"></span><span class="bub b2"></span><span class="bub b3"></span>
+    <span class="bub b4"></span><span class="bub b5"></span><span class="bub b6"></span>
+    <span class="bub b7"></span><span class="bub b8"></span>
   </div>
-  <script src="game.js"></script>
+
+  <header class="hub-header">
+    <div class="marquee">
+      <span class="glyph" aria-hidden="true">🕹️</span>
+      <div>
+        <h1>Hahnter <em>Arcade</em></h1>
+        <p class="tagline">One hub. All the games. New cabinets added as they're built.</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="games" aria-label="Game library">
+      <a class="card playable" href="games/magikarp-flap/index.html">
+        <div class="thumb">
+          <img src="games/magikarp-flap/assets/swimmy_fish_game.png" alt="Magikarp Flap gameplay screenshot" loading="lazy" />
+          <span class="badge live">Playable</span>
+        </div>
+        <div class="card-body">
+          <h2>Magikarp Flap</h2>
+          <p>Hold to swim, release to sink. Dodge coral and wild Pokémon, bank Splash charges, and chase the deep routes.</p>
+          <ul class="meta">
+            <li>Arcade</li><li>1 button</li><li>Mobile + Desktop</li>
+          </ul>
+          <span class="play-btn">▶ Play now</span>
+        </div>
+      </a>
+
+      <a class="card playable" href="games/starmie-breaker/index.html">
+        <div class="thumb">
+          <img src="games/starmie-breaker/assets/screenshot.png" alt="Starmie Breaker gameplay screenshot" loading="lazy" />
+          <span class="badge live">Playable</span>
+        </div>
+        <div class="card-body">
+          <h2>Starmie Breaker</h2>
+          <p>Bounce the Pokéball off a coral paddle, smash the reef wall, and clip Starmie mid-spin for bonus points.</p>
+          <ul class="meta">
+            <li>Arcade</li><li>Brick breaker</li><li>Mobile + Desktop</li>
+          </ul>
+          <span class="play-btn">▶ Play now</span>
+        </div>
+      </a>
+
+      <div class="card soon">
+        <div class="thumb empty"><span class="q">?</span><span class="badge">In the shop</span></div>
+        <div class="card-body">
+          <h2>Untitled Game #3</h2>
+          <p>Reserved slot. Every new game drops right here on the hub.</p>
+          <ul class="meta"><li>Coming soon</li></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="hub-footer">
+    <p>Built by Hahnter · Works offline once loaded · Add to home screen for the full arcade feel</p>
+  </footer>
+
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
